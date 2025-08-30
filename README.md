@@ -144,3 +144,219 @@ pip install scalar_fastapi
 ```
 
 访问 Scalar 文档地址：http://127.0.0.1:8000/scalar/
+
+## 三、路径参数
+
+### 008. 数据类型提示 (Type Hinting)
+
+通过为变量指定数据类型，来实现对应类型的函数提示，当赋值为不同类型的值时编辑器也会进行提示，但不是强制的。
+
+```py
+text: str = "value"
+pert: int = 90
+temp: float = 37.5
+```
+
+在函数中可以通过 `->` 方式来声明方法的类型。
+```py
+def root(num: int) -> float:
+    return pow(num, .5)
+
+root_25 = root(25)
+```
+
+可以通过管道运算符`|` 来同时声明多种类型。
+
+```py
+number: int | float = 12
+
+def root(num: int | float) -> float:
+    return pow(num, .5)
+```
+
+使用管道操作符还可以使变量变得可选。
+```py
+optional: str | None
+
+def root(num: int | float, exp: float | None) -> float:
+    return pow(num, .5 if exp is None else exp)
+```
+
+可以在函数中为参数添加默认值。
+```py
+def root(num: int | float, exp: float | None = .5) -> float:
+    return pow(num, exp)
+```
+
+定义更多类型声明：
+```py
+from typing import Any
+digitis: list[int] = [1, 2, 3, 4, 5]
+
+tuples: tuple[int, ...] = (5, 10, 15, 20, 25)
+
+cities: tuple[str, float] = ("City", 20.5)
+
+shipment: dict[str, Any] = {
+    "id": 1234,
+    "weight": 1.2,
+    "content": "wooden table",
+    "status": "in transit",
+}
+
+class City:
+    def __init__(self, name, location):
+        self.name = name
+        self.location = location
+
+hampshire = City("hamspshire", 2048593)
+city: tuple[City, float] = (hampshire, 20.5)
+```
+
+### 009. 函数装饰器 (Function Decorator)
+
+定义一个装饰器函数，需要接收一个函数参数并且返回一个闭包函数，当其他函数想要应用该装饰器函数时，需在函数上增加`@+函数名`来使用。
+
+```py
+def fence(func):
+
+    def wrapper():
+        print("+" * 10)
+        func()
+        print("+" * 10)
+    
+    return wrapper
+
+@fence
+def log():
+    print("decorated?")
+
+log()
+```
+
+可以在装饰器函数中接收其他参数。
+
+```py
+def custom_fence(fence: str = "+")
+
+    def add_fence(func):
+
+        def wrapper(text: str):
+            print(fence * len(text))
+            func(text)
+            print(fence * len(text))
+
+        return wrapper
+
+    return add_fence
+
+@custom_fence("-")
+def log(text: str)
+    print(text)
+```
+
+可以为装饰器函数增加类型提示。
+
+```py
+from typing import Callable, Any
+
+def decorator( func: Callable[ [Any], Any ] ):
+    pass
+```
+
+通过函数装饰器来模拟一个 `FastAPI` 的路由模式。
+
+```py
+from typing import Any, Callable
+
+routes: dict[str, Callable[[Any], Any]] = {}
+
+def route(path: str)
+    def register_route(func):
+        routes[path] = func
+        return func
+    return register_route
+
+@route("/shipment")
+def get_shipment():
+    return "Shipment<1001, in transit>"
+
+request: str = ""
+
+while request != "quit":
+    request = input(">    ")
+
+    if request in routes:
+        response = routes[request]()
+        print(response, end="\n\n")
+    else:
+        print("Not found")
+```
+
+### 010. 路径参数 (Path Parameter)
+
+```py
+# /shipment/12345
+@app.get("/shipment/{id}")
+def get_shipment(id: int) -> dict[str, str | int | float]:
+    return {
+        "id": id,
+        "weight": 1.2,
+        "content": "wooden table",
+        "status": "in transit"
+    }
+```
+
+### 011. 路由顺序
+
+当路由相同时，注册路由的顺序会对请求结果产生影响，如下定义中当请求路由 `/shipment/latest` 将会报错，因为它会先匹配 `/shipment/{id}` 路由并接收参数。如果将两个路由的顺序进行调换将不会报错。 
+
+```py
+@app.get("/shipment/{id}")
+def get_shipment(id: int) -> dict[str, Any]:
+    return {
+        "id": id,
+        "weight": 1.2,
+        "content": "wooden table",
+        "status": "in transit"
+    }
+    
+@app.get("/shipment/latest")
+def get_shipment_latest():
+    return {
+        "id": 1234,
+        "weight": .6,
+        "content": "wooden table",
+        "status": "in transit"
+    }
+```
+
+### 012. 简易数据库
+
+```py
+shipments = {
+    1: {
+        "weight": .6,
+        "content": "wooden table",
+        "status": "in transit"  
+    },
+    2: {
+        "weight": .8,
+        "content": "books",
+        "status": "shipped"  
+    },
+}
+
+@app.get("/shipment/latest")
+def get_latest_shipment() -> dict[str, Any]:
+    id = max(shipments.keys())
+    return shipments[id]
+
+@app.get("/shipment/{id}")
+def get_shipment(id: int) -> dict[str, Any]:
+
+    if id not in shipments:
+        return {"default": "Given id doesn't exist!"}
+
+    return shipments[id]
+```
