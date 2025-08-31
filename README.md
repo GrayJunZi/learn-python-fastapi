@@ -7,7 +7,7 @@
 01. 介绍
 02. 开始
 03. 路径参数
-04. 查询字符串参数
+04. 查询参数
 05. 增删改查操作
 06. Pydantic模型验证
 07. SQL数据库
@@ -359,4 +359,112 @@ def get_shipment(id: int) -> dict[str, Any]:
         return {"default": "Given id doesn't exist!"}
 
     return shipments[id]
+```
+
+## 四、查询字符串参数
+
+### 013. 查询字符串参数介绍
+
+默认情况下，`GET` 请求中在函数中定义的参数会被映射为查询字符串，即 `/shipment?id=` 的形式。
+
+```py
+@app.get("/shipment")
+def get_shipment(id: int) -> dict[str, Any]:
+
+    if id not in shipments:
+        return {"default": "Given id doesn't exist!"}
+
+    return shipments[id]
+```
+
+当想要为接口设置可选参数时可通过将值设置为 `None` 的形式实现。
+
+```py
+@app.get("/shipment")
+def get_shipment(id: int | None = None) -> dict[str, Any]:
+    ...
+```
+
+### 014. HTTP 异常
+
+每个路由的响应默认的状态码为 `200`。
+
+```py
+from typing improt Any
+
+from fastapi import FastAPI, HTTPException, status
+from scalar_fastapi import get_scalar_api_reference
+
+app = FastAPI()
+
+shipments = {
+    ...
+}
+
+@app.get("/shipment")
+def get_shipment(id: int) -> dict[str, Any]:
+
+    if id not in shipments:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Given id doesn't exist!",
+        )
+
+    return shipment[id]
+```
+
+### 015. POST 方法
+
+```py
+@app.post("/shipment")
+def submit_shipment(content: str, weight: float) -> dict[str, Any]:
+    
+    if weight > 25:
+        raise HTTPException {
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail="Maximum weight limit is 25kgs"
+        }
+
+    id = max(shipments.keys()) + 1
+    shipments[id] = {
+        "content": content,
+        "weight": weight,
+    }
+    
+    return {
+        "id": id,
+    }
+```
+
+### 016. 请求体
+
+```py
+@app.post("/shipment")
+def submit_shipment(data: dict:[str, Any]) -> dict[str, Any]:
+    content = data["content"]
+    weight = data["weight"]
+
+    if weight > 25:
+        raise HTTPException {
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail="Maximum weight limit is 25kgs"
+        }
+
+    id = max(shipments.keys()) + 1
+    shipments[id] = {
+        "content": content,
+        "weight": weight,
+    }
+    
+    return {
+        "id": id,
+    }
+```
+
+### 017. 路径参数和查询字符串
+
+```py
+@app.get("/shipment/{field}")
+def get_shipment_field(field: str, id: int) -> Any:
+    return shipments[id][field]
 ```
