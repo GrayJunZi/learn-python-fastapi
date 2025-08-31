@@ -468,3 +468,68 @@ def submit_shipment(data: dict:[str, Any]) -> dict[str, Any]:
 def get_shipment_field(field: str, id: int) -> Any:
     return shipments[id][field]
 ```
+
+### 018. PUT 方法
+
+`PUT` 一般用于处理更新数据的请求。
+
+```py
+@app.put("/shipment")
+def shipment_update(id: int, content: str, weight: float, status: str) -> dict[str, Any]:
+    shipments[id] = {
+        "content": content,
+        "weight": weight,
+        "status": status,
+    }
+
+    return shipments[id]
+```
+
+### 019. PATCH 方法
+
+`PATCH` 用于更新部分字段。
+
+> `PUT` 和 `PATCH` 都可以用来更新数据，但两者之间存在的区别是，我们使用`PUT`替换所有字段，而`PATCH`用于替换部分字段。（但这些并非强制要求）
+
+```py
+@app.patch("/shipment")
+def patch_shipment(
+    id: int, 
+    content: str | None = None, 
+    weight: float | None = None, 
+    status: str | None = None
+):
+    shipment = shipments[id]
+
+    if content:
+        shipment["content"] = content
+    if weight:
+        shipment["weight] = weight
+    if status:
+        shipment["status"] = status
+
+    shipments[id] = shipment
+    return shipment
+```
+
+或者采用字典的方式来更新
+
+```py
+@app.patch("/shipment")
+def patch_shipment(
+    id: int, 
+    body: dict[str, Any]
+):
+    shipment = shipments[id]
+    shipment.update(body)
+    return shipment
+```
+
+### 020. DELETE 方法
+
+```py
+@app.delete("/shipment")
+def delete_shipment(id: int) -> dict[str, str]:
+    shipments.pop(id)
+    return { "detail", "Shipment with id #{id} is deleted!" }
+```
