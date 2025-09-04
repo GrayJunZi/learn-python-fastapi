@@ -9,7 +9,7 @@
 03. 路径参数
 04. 查询参数
 05. 增删改查操作
-06. Pydantic模型验证
+06. Pydantic模型
 07. SQL数据库
 08. SQL模型
 09. 异步IO
@@ -469,6 +469,8 @@ def get_shipment_field(field: str, id: int) -> Any:
     return shipments[id][field]
 ```
 
+## 五、增删改查操作
+
 ### 018. PUT 方法
 
 `PUT` 一般用于处理更新数据的请求。
@@ -532,4 +534,154 @@ def patch_shipment(
 def delete_shipment(id: int) -> dict[str, str]:
     shipments.pop(id)
     return { "detail", "Shipment with id #{id} is deleted!" }
+```
+
+## 六、Pydantic模型
+
+### 021. 为什么使用Pydantic
+
+Pydantic将会验证请求的参数。
+
+```py
+from pydantic import BaseModel
+
+class Shipment(BaseModel):
+    content: str
+    weight: float
+    destination: int
+
+@app.post("/shipment")
+def submit_shipment(shipment: Shipment) -> Shipment:
+    if shipment.weight > 25:
+        raise HTTPException(
+            status_code=status.HTTP_406_NOT_ACCEPTABLE,
+            detail="Maximum weight limit is 25 kgs",
+        )
+
+    new_id = max(shipments.keys()) + 1
+
+    shipments[new_id] = {
+        "content": shipment.content,
+        "weight": shipment.weight,
+        "status": "placed",
+    }
+
+    return { "id": new_id }
+```
+
+### 022. 模型字段
+
+将模型类移到 `schemas.py` 文件单独存储。
+
+```py
+from random import randint
+from pydantic import BaseModel, Field
+
+def random_destination():
+    return randint(11000,11999)
+
+class Shipment(BaseModel):
+    content: str = Field(max_length=30)
+    weight: float = Field(le=25, ge=1)
+    destination: int | None = Field(default_factory=random_destination),
+
+```
+
+- `Field(max_length)` - 字符串长度小于等于30。
+- `Field(lt=25)` - 验证值必须小于25。
+- `Field(le=25, ge=1)` - 验证值必须小于等于25，并且大于等于1。
+- `Field(default=None)` - 默认为None。
+- `Field(default_factory=random_destination)` - 创建时被调用并赋值返回值。
+
+### 023. 枚举
+
+定义枚举
+
+```py
+class ShipmentStatus(str, Enum):
+    placed = "placed"
+    in_transit = "in_transit"
+    out_for_delivery = "out_for_delivery"
+    delivered = "delivered"
+```
+
+### 024. 响应模型
+
+第一种可以通过定义返回的模型类。
+
+```py
+@app.get("/shipment")
+def get_shipment(id: int) -> Shipment:
+    shipment = shipments[id]
+    return Shipment(
+        # 使用 ** 解包字典中的内容
+        **shipment
+    )
+```
+
+第二种方式可以在路由上标记响应的模型。
+
+```py
+@app.get("/shipment", response_model=Shipment)
+def get_shipment(id: int):
+    return shipments[id]
+```
+
+### 025. 不同的模型
+
+可以为不同的接口创建独立的模型，使接口只接收和返回需要的内容。
+
+```py
+# 定义基类（将重复声明的字段抽象出来）
+class BaseShipment(BaseModel):
+    content: str
+    weight: float=Field(le=25)
+    destination: int
+
+# 继承基类
+class ShipmentRead(BaseShipment):
+    status: ShipmentStatus
+
+# 继承基类
+class ShipmentCreate(BaseShipment):
+    pass
+
+# 继承基类
+class ShipmentUpdate(BaseModel):
+    status: ShipmentStatus
+```
+
+### 026. 技巧和提示 (Tips & Tricks)
+
+1. 可以通过在路由中将`response_model`设为`None`，这在`FastAPI`中表示跳过此用例的验证。
+```py
+@app.post("/shipment", response_model=None)
+```
+
+2. 使用模型转储方法。
+```py
+@app.post("/shipment", response_model=None)
+def submit_shipment(shipment: ShipmentCreate) -> dict[str, Any]:
+    new_id = max(shipments.keys()) + 1
+    shipments[new_id] = {
+        **shipment.model_dump(),
+        "status": "placed",
+    }
+```
+
+3. 为字段添加默认值
+```py
+class ShipmentUpdate(BaseModel):
+    content: str | None = Field(default=None)
+    weight: float | None = Field(default=None, le=25)
+    destination: int | None = Field(default=None)
+    status: ShipmentStatus()
+```
+
+4. 更新时使用模型转储方法排除默认值字段
+```py
+@app.patch("/shipment", response_model=ShipmentRead)
+def update_shipment(id: int, body: ShipmentUpdate):
+    shipments[id].update(body.model_dump(exclude_none=True)
+    return shipments[id]
 ```
