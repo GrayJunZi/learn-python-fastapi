@@ -685,3 +685,295 @@ def update_shipment(id: int, body: ShipmentUpdate):
     shipments[id].update(body.model_dump(exclude_none=True)
     return shipments[id]
 ```
+
+## 七、SQL数据库
+
+> 如何使用SQL数据库持久化数据
+
+### 027. JSON
+
+> JSON 文件可以包含与字典相同的结构，我们可以将数据保存到JSON文件中。
+
+读取json文件
+```py
+import json
+
+shipments = {}
+
+with open("shipments.json") as json_file:
+    data = json.load(json_file)
+
+    for value in data:
+        shipments[value["id"]] = value
+
+print(shipments)
+```
+
+### 028. 什么是SQL
+
+SQL即结构化查询语言(Structured Query Language)，SQL数据库以固定列存储表和数据，并允许与数据交互，比如创建数据、读取数据等，使用SQL操作数据。
+
+### 029. SQLite 数据库
+
+引入 `sqlite3` 来操作连接Sqlite
+
+```py
+import sqlite3
+
+# 连接SQLite数据库
+connection = sqlite3.connect('sqlite.db')
+
+cursor = connection.cursor()
+
+# 1. 创建表
+cursor.execute('''
+CREATE TABLE IF NOT EXISTS shipment (
+    id INTEGER,
+    content TEXT,
+    weight REAL,
+    status TEXT
+)
+''')
+
+# 关闭数据库连接
+connection.close()
+```
+
+### 030. 添加数据
+
+执行插入SQL并提交
+
+```py
+# 添加数据
+cursor.execute('''
+INSERT INTO shipment (id, content, weight, status) VALUES (1, 'palm trees', 8.5, 'placed')
+''')
+
+# 提交
+connection.commit()
+```
+
+### 031. 获取数据
+
+编写SQL的Where条件来筛选数据。
+
+```py
+data =cursor.execute('''
+SELECT * FROM shipment
+WHERE id = 1
+''').fetchall()
+```
+
+获取所有数据可使用 `fetchall()`
+```py
+cursor.fetchall()
+```
+
+获取指定几条数据可使用 `fetchmany()`
+```py
+cursor.fetchman(2)
+```
+
+获取一条数据可使用 `fetchone`
+```py
+cursor.fetchone()
+```
+
+### 032. 主键
+
+删除数据
+
+```py
+cursor.excecute('''
+DELETE FROM shipment 
+''')
+connection.commit()
+```
+
+删除数据库
+```py
+cursor.excecute('''
+DROP TABLE shipment 
+''')
+connection.commit()
+```
+
+### 033. 更新数据
+
+```py
+cursor.execute('''
+UPDATE shipment SET status = 'in_transit'
+WHERE id = 1
+''')
+connection.commit()
+```
+
+### 034. SQL查询参数
+
+如果SQL查询时直接将参数拼接到SQL字符串中将会造成SQL注入的问题，所以需要将其进行参数化。
+
+可以使用 `?` 的形式作为占位符，实际执行时将元组参数替换进来。
+
+```py
+status = 'placed'
+cursor.execute('''
+UPDATE shipment SET status = ?
+WHERE id = 1
+''', (status, ))
+connection.commit()
+
+```
+
+或者采用 `:` 为占位符命名，然后将参数以字典的形式传入进去。
+
+```py
+id = 0,
+status = 'in_transit'
+cursor.execute('''
+UPDATE shipment SET status = :status
+WHERE id = :id
+''', {'status':status,'id':id})
+connection.commit()
+```
+
+### 035. 数据库
+
+封装数据库操作类
+
+```py
+import sqlite3
+
+from .schemas import ShipmentCreate, ShipmentUpdate
+from typing import Any
+
+class Database:
+    def __init__(self):
+        # 连接SQLite数据库
+        self.connection = sqlite3.connect('sqlite.db', check_same_thread=False)
+        self.cursor = self.connection.cursor()
+        self.create_table('shipment')
+
+    def create_table(self, name: str):
+        # 1. 创建表
+        self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS shipment (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            content TEXT,
+            weight REAL,
+            status TEXT
+        )
+        ''')
+
+    def create(self, shipment: ShipmentCreate) -> int:
+        # 2. 添加 shipment 数据
+        self.cursor.execute('''
+        INSERT INTO shipment (content, weight, status) VALUES (:content, :weight, :status)
+        ''', {
+            **shipment.model_dump(),
+            "status": "placed"
+        })
+
+        # 提交
+        self.connection.commit()
+
+        return self.cursor.lastrowid
+
+    def get(self, id: int) -> dict[str, int] | None:
+        # 3. 读取 shipment 数据
+        self.cursor.execute('''
+            SELECT * FROM shipment
+            WHERE id = :id
+        ''', (id,))
+
+        # 获取前一条数据
+        row = self.cursor.fetchone()
+
+        return {
+            "id": row[0],
+            "content": row[1],
+            "weight": row[2],
+            "status": row[3],
+        } if row else None
+
+    def update(self,id: int,  shipment: ShipmentUpdate) -> dict[str, Any]:
+        # 4. 更新 shipment 数据
+        self.cursor.execute('''
+                       UPDATE shipment
+                       SET status = :status
+                       WHERE id = :id
+                       ''', {
+            "id": id,
+            "status": "in_transit"
+        })
+        self.connection.commit()
+
+        return self.get(id)
+
+    def delete(self, id: int):
+        self.cursor.execute('''
+        DELETE FROM shipment WHERE id = :id
+                            ''', {
+            "id": id,
+        })
+        self.connection.commit()
+
+    def close(self):
+        self.cursor.close()
+        self.connection.close()
+```
+
+### 036. API使用
+
+在接口层调用封装好的数据库类的方法。
+
+```py
+from typing import Any
+
+from fastapi import FastAPI, HTTPException
+from pydantic.v1 import NoneStr
+from scalar_fastapi import get_scalar_api_reference
+
+from .database import Database
+from .schemas import ShipmentRead, ShipmentCreate, ShipmentUpdate
+
+app = FastAPI()
+
+db = Database()
+
+
+@app.get("/shipment", response_model=ShipmentRead)
+def get_shipment(id: int):
+    shipment = db.get(id)
+
+    if shipment is None:
+        raise HTTPException(status_code=404, detail="Shipment not found")
+
+    return shipment
+
+
+@app.post("/shipment", response_model=None)
+def submit_shipment(shipment: ShipmentCreate) -> dict[str, int]:
+    id = db.create(shipment)
+    return {"id": id}
+
+
+@app.patch("/shipment", response_model=ShipmentRead)
+def update_shipment(id: int, shipment: ShipmentUpdate):
+    shipment = db.update(id, shipment)
+    return shipment
+
+
+@app.delete("/shipment")
+def delete_shipment(id: int) -> dict[str, str]:
+    db.delete(id)
+
+    return {"detail": f"Shipment id #{id} was deleted"}
+
+
+@app.get("/scalar")
+def get_scalar_docs():
+    return get_scalar_api_reference(
+        openapi_url=app.openapi_url,
+        title="Scalar API"
+    )
+```
